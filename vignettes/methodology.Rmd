@@ -116,7 +116,7 @@ F_mat <- compute_wqte_matrix(
 ```
 
 References. Schreiber (2000) introduced transfer entropy
-(<doi:10.1103/PhysRevLett.85.461>). The wavelet implementation borrows
+([doi:10.1103/PhysRevLett.85.461](https://doi.org/10.1103/PhysRevLett.85.461)). The wavelet implementation borrows
 from the `waveslim` package; quantile conditioning extends the Bekiros
 et al. quantile-cross-spectral approach.
 
@@ -173,7 +173,7 @@ fit <- iv_2sls_attribute(
 )
 ```
 
-Reference: Stock and Watson (2018) <doi:10.1111/ecoj.12593>.
+Reference: Stock and Watson (2018) [doi:10.1111/ecoj.12593](https://doi.org/10.1111/ecoj.12593).
 
 # 5. LASSO instrument selection
 
@@ -203,7 +203,7 @@ fit_lasso <- lasso_iv_attribute(
 ```
 
 Reference: Belloni, Chernozhukov and Hansen (2014)
-<doi:10.1093/restud/rdt044>.
+[doi:10.1093/restud/rdt044](https://doi.org/10.1093/restud/rdt044).
 
 # 6. Local projections
 
@@ -232,7 +232,7 @@ lp_fit <- local_projections(
 )
 ```
 
-Reference: Jordà (2005) <doi:10.1257/0002828053828518>.
+Reference: Jordà (2005) [doi:10.1257/0002828053828518](https://doi.org/10.1257/0002828053828518).
 
 # 7. Rigobon heteroskedasticity-based identification
 
@@ -260,7 +260,7 @@ rig_fit <- rigobon_id(
 )
 ```
 
-Reference: Rigobon (2003) <doi:10.1162/003465303772815727>.
+Reference: Rigobon (2003) [doi:10.1162/003465303772815727](https://doi.org/10.1162/003465303772815727).
 
 # 8. Cinelli-Hazlett robustness value
 
@@ -295,7 +295,7 @@ rv <- cinelli_hazlett_rv(
 )
 ```
 
-Reference: Cinelli and Hazlett (2020) <doi:10.1111/rssb.12348>.
+Reference: Cinelli and Hazlett (2020) [doi:10.1111/rssb.12348](https://doi.org/10.1111/rssb.12348).
 
 # 9. Identification-status classification
 
