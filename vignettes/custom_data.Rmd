@@ -1,0 +1,309 @@
+---
+title: "Using Custom Datasets"
+author: "Avishek Bhandari"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using Custom Datasets}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4
+)
+```
+
+# Overview
+
+The G20 panel that ships with `contagionchannels` is one possible
+application; the same machinery applies to any directed network of return
+series and any set of channel proxies a user can construct. This vignette
+shows how to plug in custom data, explains the contracts each function
+expects, and ends with a worked example using a synthetic five-market panel
+seeded for reproducibility.
+
+```{r libs}
+library(contagionchannels)
+library(xts)
+library(dplyr)
+```
+
+# 1. Required data structure
+
+Two objects drive the entire pipeline.
+
+**Returns.** An `xts` object with one column per market. Rows are trading
+days (the index must be `Date` or `POSIXct`); columns are demeaned daily log
+returns. Missing values are allowed but should be sparse; `na.locf` or
+listwise deletion are both acceptable, but the user is responsible for the
+choice.
+
+**Channel proxies.** A `data.frame` with a `Date` column matching the
+returns index plus one column per *raw component* of each channel. The
+helper `build_channel_composites()` does the standardisation and PCA
+reduction; the user must only ensure that the components are aligned on
+date and roughly stationary (returns or first-differenced spreads, never
+raw levels).
+
+```{r contracts, eval = FALSE}
+str(my_returns_xts)
+# An 'xts' object on 2010-01-04/2024-12-31 of 18 columns
+
+str(my_channels_df)
+# 'data.frame' with Date + raw component columns
+```
+
+# 2. Custom market list and crisis periods
+
+The package does not hard-code 18 markets; the WQTE estimator accepts any
+$N \ge 3$ markets. To pass your own crisis periods, build a named `list`
+of `Date`-vector pairs:
+
+```{r periods, eval = FALSE}
+my_periods <- list(
+  Pre_Pandemic = as.Date(c("2018-01-02", "2020-01-31")),
+  Pandemic     = as.Date(c("2020-02-01", "2021-12-31")),
+  Recovery     = as.Date(c("2022-01-01", "2024-12-31"))
+)
+```
+
+Periods need not be contiguous and can overlap, though overlapping
+windows complicate cross-period comparisons. The conventional non-overlap
+rule is what the paper uses.
+
+# 3. Custom channel composites
+
+`build_channel_composites()` exposes a `mapping` argument that lets the
+user override the default component-to-channel assignment. Each channel
+must have at least two components for the PCA reduction to be defined.
+
+```{r composites, eval = FALSE}
+my_mapping <- list(
+  Trade           = c("BDI_chg", "TradeWeightedFX_chg", "ContainerRate_chg"),
+  Financial       = c("FRAOIS", "TEDspread", "CDS_lvl"),
+  Geopolitical    = c("GPR_daily", "GPR_actions"),
+  Behavioral      = c("VIX_innov", "VVIX_innov", "PutCallRatio"),
+  Monetary_Policy = c("ShadowRate_surp", "FF_futures_surp")
+)
+
+my_channels <- build_channel_composites(
+  proxy_grid = my_proxies_df,
+  mapping    = my_mapping,
+  standardise = "rolling_252"
+)
+```
+
+The `standardise` argument selects between `"global"` (one z-score over the
+whole sample), `"rolling_252"` (one-year rolling), or `"period"` (within
+each crisis period). The paper uses `"rolling_252"` to match the daily
+update cadence of the underlying components.
+
+# 4. Calling the pipeline
+
+Once returns and composites are in hand, `run_contagion_pipeline()`
+consumes both. The full call mirrors the replication vignette but with
+user-supplied objects:
+
+```{r pipeline, eval = FALSE}
+results <- run_contagion_pipeline(
+  returns       = my_returns_xts,
+  channels      = my_channels,
+  periods       = my_periods,
+  scale         = 5,
+  tau           = 0.50,
+  abs_threshold = NULL,    # NULL => derive from first period Q75
+  methods       = c("iv2sls", "lp"),
+  bootstrap_B   = 499,
+  n_cores = 4
+)
+```
+
+Setting `abs_threshold = NULL` instructs the pipeline to derive the
+absolute threshold from the 75th percentile of the *first* listed period's
+WQTE distribution. Alternatively, pass a numeric value to fix the
+threshold across applications, which is useful for cross-paper
+comparability.
+
+# 5. Adapting visualisations for custom data
+
+The plotting helpers accept any tidy `data.frame` with a `Period` and
+`Channel` column; they do not assume the eight G20 sub-periods. To
+customise:
+
+```{r plotting, eval = FALSE}
+plot_attribution_stack(
+  shares_long = results$shares_long,
+  period_order = names(my_periods),
+  palette      = c(Trade = "#1f77b4", Financial = "#d62728",
+                   Geopolitical = "#9467bd", Behavioral = "#2ca02c",
+                   Monetary_Policy = "#ff7f0e")
+)
+
+plot_qte_intensity(
+  F_matrix  = results$F_matrices$Pandemic,
+  threshold = results$abs_threshold,
+  market_order = c("US", "EU", "JP", "EM_Asia", "EM_LatAm")
+)
+```
+
+Both helpers return a `ggplot` object that can be modified with the
+standard `ggplot2` grammar.
+
+# 6. Worked example: synthetic five-market panel
+
+A small, fully-reproducible example is the most reliable way to confirm
+the contracts. Below we simulate five correlated equity-like return series
+together with five channel components, build the composites, and run a
+trimmed Stage 1 + Stage 2 pipeline.
+
+```{r synthetic-data}
+set.seed(20260429)
+
+n_obs   <- 1500
+markets <- c("US", "EU", "JP", "EM_Asia", "EM_LatAm")
+dates   <- seq.Date(from = as.Date("2018-01-02"), by = "day",
+                    length.out = n_obs)
+
+# Common factor + idiosyncratic shocks
+Fcom <- rnorm(n_obs, sd = 0.012)
+ret_mat <- sapply(markets, function(m) {
+  loading <- runif(1, 0.4, 0.9)
+  loading * Fcom + rnorm(n_obs, sd = 0.010)
+})
+my_returns <- xts(ret_mat, order.by = dates)
+
+# Channel proxy raw components
+my_proxies <- data.frame(
+  Date              = dates,
+  BDI_chg           = rnorm(n_obs, sd = 0.5),
+  TradeFX_chg       = rnorm(n_obs, sd = 0.4),
+  FRAOIS            = arima.sim(list(ar = 0.95), n_obs) * 0.01,
+  TEDspread         = arima.sim(list(ar = 0.93), n_obs) * 0.01,
+  GPR_daily         = exp(rnorm(n_obs, sd = 0.2)),
+  GPR_actions       = exp(rnorm(n_obs, sd = 0.3)),
+  VIX_innov         = rnorm(n_obs, sd = 1.5),
+  VVIX_innov        = rnorm(n_obs, sd = 1.0),
+  ShadowRate_surp   = rnorm(n_obs, sd = 0.05),
+  FF_futures_surp   = rnorm(n_obs, sd = 0.04)
+)
+
+my_mapping <- list(
+  Trade           = c("BDI_chg", "TradeFX_chg"),
+  Financial       = c("FRAOIS", "TEDspread"),
+  Geopolitical    = c("GPR_daily", "GPR_actions"),
+  Behavioral      = c("VIX_innov", "VVIX_innov"),
+  Monetary_Policy = c("ShadowRate_surp", "FF_futures_surp")
+)
+
+my_periods <- list(
+  Calm   = as.Date(c("2018-01-02", "2019-12-31")),
+  Stress = as.Date(c("2020-01-01", "2021-12-31"))
+)
+```
+
+```{r synthetic-composites, eval = FALSE}
+my_channels <- build_channel_composites(
+  proxy_grid  = my_proxies,
+  mapping     = my_mapping,
+  standardise = "rolling_252"
+)
+
+head(my_channels, 3)
+```
+
+A trimmed Stage 1 estimate on the *Calm* sub-period:
+
+```{r synthetic-stage1, eval = FALSE}
+calm_dates    <- my_periods$Calm
+returns_calm  <- my_returns[paste0(calm_dates[1], "/", calm_dates[2])]
+
+F_calm <- compute_wqte_matrix(
+  returns   = returns_calm,
+  scale     = 5,
+  tau       = 0.50,
+  n_cores = 1,
+)
+
+abs_thr_calm <- quantile(
+  F_calm[upper.tri(F_calm) | lower.tri(F_calm)],
+  probs = 0.75, na.rm = TRUE
+)
+
+links_calm <- which(F_calm >= abs_thr_calm, arr.ind = TRUE)
+nrow(links_calm)
+```
+
+A Stage 2 IV/2SLS attribution on the same window:
+
+```{r synthetic-stage2, eval = FALSE}
+channels_calm <- my_channels[
+  my_channels$Date >= calm_dates[1] & my_channels$Date <= calm_dates[2], ]
+
+iv_calm <- iv_2sls_attribute(
+  returns_period  = returns_calm,
+  channels_period = channels_calm,
+  links           = links_calm,
+  cluster_se      = TRUE
+)
+
+iv_calm$shares
+```
+
+End-to-end pipeline call on the synthetic data:
+
+```{r synthetic-pipeline, eval = FALSE}
+synth_results <- run_contagion_pipeline(
+  returns       = my_returns,
+  channels      = my_channels,
+  periods       = my_periods,
+  scale         = 5,
+  tau           = 0.50,
+  abs_threshold = abs_thr_calm,
+  methods       = c("iv2sls"),
+  bootstrap_B   = 199,
+  n_cores = 1
+)
+
+synth_results$summary_table
+```
+
+The synthetic panel is too small for inference to be meaningful, but
+running the chain end-to-end is the cleanest way to verify that the data
+contracts are satisfied before committing compute to a real estimation.
+
+# Common pitfalls
+
+A few user errors recur in support requests:
+
+* **Date misalignment.** `my_proxies$Date` must match `index(my_returns)`
+  exactly; the pipeline performs an `inner_join` and silently drops dates
+  that do not match. Always inspect `nrow(my_channels)` after composites
+  are built.
+* **Levels rather than changes.** Channel proxies should be stationary.
+  Pass first-differenced spreads, log-changes of indices, or innovations
+  from a fitted model — never raw levels of an integrated series.
+* **Too few markets.** WQTE is defined for $N \ge 3$, but Stage 2
+  attribution needs enough directional links per period to estimate five
+  channel coefficients. Plan for at least eight markets and a sub-period
+  spanning 250 trading days.
+* **Wrong threshold base.** When using `abs_threshold = NULL` the pipeline
+  defaults to the first listed period; if your first period is a stress
+  period the resulting threshold will be conservative and may zero out
+  links in calmer periods. List a calm period first when relying on the
+  default.
+
+These pitfalls aside, the package's contracts are deliberately minimal: an
+`xts` of returns, a `data.frame` of proxies, and a `list` of period
+endpoints. Anything that satisfies those three constraints can be analysed
+with the same machinery that produces the headline results in the paper.
+
+# Session info
+
+```{r session}
+sessionInfo()
+```

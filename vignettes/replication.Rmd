@@ -1,0 +1,413 @@
+---
+title: "Replicating the Paper Results"
+author: "Avishek Bhandari"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Replicating the Paper Results}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.align = "center"
+)
+```
+
+# Overview
+
+This vignette walks through the full replication pipeline that backs the paper
+*"Two-Stage Detection and Attribution of Cross-Border Financial Contagion
+Channels"*. The package `contagionchannels` exposes a deliberately small set of
+verbs that map one-to-one onto the empirical sections of the manuscript: a
+Stage 1 *detection* step that estimates a directed Wavelet-Quantile Transfer
+Entropy (WQTE) network, and a Stage 2 *attribution* step that decomposes the
+detected linkages into five economically interpretable channels (Trade,
+Financial, Geopolitical, Behavioral, Monetary_Policy) using a battery of
+identification strategies.
+
+The headline numbers reproduced below are the ones reported in the published
+tables. Every code chunk is annotated so that a careful reader can follow how
+each row of Tables 1, 2, and 6 is built, and how Figures 1-7 are assembled. We
+intentionally make the most expensive Stage 1 estimation `eval = FALSE` so the
+vignette compiles in seconds; all illustrative chunks use a single sub-period
+to keep run-time below CRAN's check threshold.
+
+# 1. Setup
+
+```{r dependencies}
+library(contagionchannels)
+library(xts)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(igraph)
+```
+
+The package leans on a handful of well-established CRAN dependencies:
+`waveslim` for the maximal-overlap discrete wavelet transform, `quantreg` for
+the conditional quantile machinery used inside WQTE, `RTransferEntropy` for
+shuffled bias correction, `AER` for IV/2SLS, `hdm` for Belloni-Chernozhukov-
+Hansen LASSO IV, `lpirfs` for local projections, and `igraph` for community
+detection. The `run_contagion_pipeline()` wrapper handles loading them on
+demand; we expose the full chain here so each step is auditable.
+
+# 2. Loading the bundled datasets
+
+Three datasets ship with the package and are sufficient to reproduce every
+empirical statement in the paper.
+
+```{r data-load}
+data(g20_returns)
+data(channel_proxies)
+data(crisis_periods)
+
+dim(g20_returns)
+range(index(g20_returns))
+length(crisis_periods)
+names(crisis_periods)
+```
+
+`g20_returns` is an `xts` object of daily log returns for 18 G20 equity
+indices spanning 2 January 2006 through 31 March 2026 (5,036 trading days
+after holiday alignment). `channel_proxies` is a `data.frame` keyed on `Date`
+holding the raw component series that feed the five composite channels.
+`crisis_periods` is a named `list` of length eight whose entries are
+length-two `Date` vectors marking the start and end of each sub-period:
+`PreCrisis`, `GFC`, `ESDC`, `CSC`, `PreCOVID`, `COVID`, `RusUkr`, and
+`MidEastTariffs`.
+
+# 3. Building the v2 channel composites
+
+The paper uses a v2 specification for the five channel composites that
+re-balances the components and applies a unit-variance standardisation within
+each rolling window. The helper `build_channel_composites()` consumes the raw
+proxy grid and returns a `data.frame` with one column per channel.
+
+```{r composites}
+channels <- build_channel_composites(channel_proxies)
+head(channels[, c("Date", "Trade", "Financial", "Geopolitical",
+                  "Behavioral", "Monetary_Policy")], 3)
+```
+
+Each composite is a unit-variance latent factor extracted by a one-factor
+PCA on its respective component block. The composites are signed so that
+positive values indicate *tightening* of the channel (e.g., wider FRA-OIS
+spreads on the Financial channel; higher GPR on the Geopolitical channel),
+ensuring sign coherence across periods.
+
+# 4. Stage 1: WQTE detection
+
+Stage 1 estimates a directed information-flow matrix at wavelet scale 5
+(corresponding to dyadic horizons of 32-64 trading days, i.e. roughly the
+quarterly business-cycle band) and at the median quantile `tau = 0.50`. For
+each ordered pair $(i,j)$ of markets we compute the bias-corrected wavelet
+coefficient transfer entropy
+
+\[
+\widehat{T}_{i \to j}^{(s,\tau)} \;=\;
+T_{i \to j}^{(s,\tau)} \;-\;
+\frac{1}{B}\sum_{b=1}^{B} T_{i^{(b)} \to j}^{(s,\tau)},
+\]
+
+where the second term is the mean over `B = 100` shuffled-source surrogates.
+
+```{r stage1-full, eval = FALSE}
+F_full <- compute_wqte_matrix(
+  returns = g20_returns,
+  scale   = 5,
+  tau     = 0.50,
+  n_cores = 4
+)
+```
+
+A fast illustrative version restricted to the Pre-Crisis sub-period is small
+enough to evaluate inline:
+
+```{r stage1-precrisis}
+pc_dates  <- crisis_periods$PreCrisis
+returns_pc <- g20_returns[paste0(pc_dates[1], "/", pc_dates[2])]
+
+F_pc <- compute_wqte_matrix(
+  returns = returns_pc,
+  scale   = 5,
+  tau     = 0.50,
+  n_cores = 1
+)
+
+dim(F_pc)
+round(F_pc[1:4, 1:4], 4)
+```
+
+## Absolute thresholding
+
+Rather than a period-specific adaptive cut, the paper fixes the WQTE
+threshold at the 75th percentile of the *Pre-Crisis* WQTE distribution and
+applies that absolute level to every other sub-period. This makes density
+comparable across regimes.
+
+```{r threshold}
+F_pc_offdiag <- F_pc[upper.tri(F_pc) | lower.tri(F_pc)]
+abs_thr <- quantile(F_pc_offdiag, probs = 0.75, na.rm = TRUE)
+abs_thr
+```
+
+# 5. Stage 1 results: density and centrality (Table 1)
+
+With the threshold pinned, network density at scale 5 / `tau = 0.50` ranges
+from **14.05% to 32.03%** across the eight sub-periods, providing meaningful
+period-to-period variation. The helper `summarise_stage1()` returns a tidy
+table with density, mean WQTE, and the dominant transmitter / receiver per
+period.
+
+```{r stage1-table, eval = FALSE}
+stage1_tbl <- summarise_stage1(
+  returns_xts    = g20_returns,
+  periods        = crisis_periods,
+  scale          = 5,
+  tau            = 0.50,
+  abs_threshold  = abs_thr
+)
+stage1_tbl
+```
+
+The expected contents reproduce Table 1 of the paper:
+
+| Period          | Density | Mean WQTE | Top Transmitter | Top Receiver |
+|-----------------|--------:|----------:|:----------------|:-------------|
+| PreCrisis      | 0.2516  | 0.0287    | USA             | EUR          |
+| GFC             | 0.3203  | 0.0421    | USA             | KOR          |
+| ESDC            | 0.2871  | 0.0356    | DEU             | ITA          |
+| CSC             | 0.1763  | 0.0224    | CHN             | BRA          |
+| PreCOVID       | 0.1405  | 0.0198    | USA             | DEU          |
+| COVID           | 0.2944  | 0.0388    | USA             | GBR          |
+| RusUkr          | 0.2031  | 0.0254    | DEU             | TUR          |
+| MidEastTariffs  | 0.1842  | 0.0231    | USA             | SAU          |
+
+# 6. Stage 2: IV/2SLS attribution (Table 2)
+
+The Stage 2 attribution regresses each detected directional flow
+$\widehat{F}_{i\to j,t}$ on the five channel composites using channel-specific
+external instruments. For the Financial channel the instrument is the lagged
+FRA-OIS spread; for Trade, lagged Baltic Dry shipping rates; for
+Geopolitical, lagged GPR-Daily; for Behavioral, lagged VIX innovation; for
+Monetary_Policy, lagged shadow-rate surprises. The function
+`iv_2sls_attribute()` returns a list with point estimates, robust standard
+errors, the Sargan-Hansen J-statistic, and a per-channel share decomposition.
+
+```{r stage2-pc, eval = FALSE}
+links_pc <- which(F_pc >= abs_thr, arr.ind = TRUE)
+channels_pc <- channels[channels$Date >= pc_dates[1] &
+                          channels$Date <= pc_dates[2], ]
+
+iv_pc <- iv_2sls_attribute(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  cluster_se      = TRUE
+)
+
+iv_pc$shares
+```
+
+Iterating over all eight sub-periods reproduces Table 2:
+
+| Period          | Trade | Financial | Geopolitical | Behavioral | Monetary |
+|-----------------|------:|----------:|-------------:|-----------:|---------:|
+| PreCrisis      | 0.184 |  **0.359**|        0.092 |      0.143 |    0.222 |
+| GFC             |**0.279**|    0.241|        0.108 |      0.198 |    0.174 |
+| ESDC            | 0.156 |  **0.395**|        0.121 |      0.142 |    0.186 |
+| CSC             | 0.198 |    0.221 |        0.143 |      0.185 |**0.253** |
+| PreCOVID       | 0.181 |  **0.316**|        0.116 |      0.184 |    0.203 |
+| COVID           | 0.142 |    0.237 |    **0.275** |      0.175 |    0.171 |
+| RusUkr          | 0.198 |    0.213 |        0.193 |      0.120 |**0.276** |
+| MidEastTariffs  | 0.211 |    0.182 |        0.156 |      0.133 |**0.318** |
+
+The dominant channel is bolded per period and matches the paper's headline:
+**Pre-Crisis Financial 35.9%**, **GFC Trade 27.9%**, **ESDC Financial 39.5%**,
+**CSC Monetary 25.3%**, **Pre-COVID Financial 31.6%**, **COVID Geopolitical
+27.5%**, **RusUkr Monetary 27.6%**, and **MidEastTariffs Monetary 31.8%**.
+Note also that the Behavioral channel never exceeds 22% in any period.
+
+# 7. Cross-method comparison: LP and Rigobon (Table 6)
+
+Identification rests on more than one strategy. The paper triangulates
+across IV/2SLS, Jordà local projections at horizon 5 (LP-h5), and Rigobon's
+heteroskedasticity-based identification.
+
+```{r lp-rigobon, eval = FALSE}
+lp_pc <- local_projections(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  horizons        = c(1, 5, 22)
+)
+
+rig_pc <- rigobon_id(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  regime_split    = "vix_high_low"
+)
+
+lp_pc$shares_h5
+rig_pc$shares
+```
+
+A period is labelled **identification-robust** when the dominant channel
+agrees across IV/2SLS, LP-h5, and Rigobon. Reproducing Table 6 of the paper:
+
+| Period          | IV/2SLS dom.   | LP-h5 dom.   | Rigobon dom. | Status            |
+|-----------------|:---------------|:-------------|:-------------|:------------------|
+| PreCrisis      | Financial      | Financial    | Financial    | **Robust**        |
+| GFC             | Trade          | Behavioral   | Financial    | Fragile           |
+| ESDC            | Financial      | Financial    | Financial    | **Robust**        |
+| CSC             | Monetary       | Behavioral   | Monetary     | Fragile           |
+| PreCOVID       | Financial      | Trade        | Financial    | Fragile           |
+| COVID           | Geopolitical   | Behavioral   | Trade        | Fragile           |
+| RusUkr          | Monetary       | Geopolitical | Monetary     | Fragile           |
+| MidEastTariffs  | Monetary       | Trade        | Monetary     | Fragile           |
+
+Only **Pre-Crisis** and **ESDC** are identification-robust; the remaining
+six periods are method-fragile and must be discussed with appropriate
+caveats.
+
+## Sargan over-identification
+
+For the most contested periods, the J-test rejects exogeneity in the
+majority of links. The Sargan rejection rates reported in the paper are
+**67.3% (GFC)**, **100% (COVID)**, and **65.5% (ESDC)**; on this basis the
+GFC and COVID rows are demoted to *exploratory* in the published narrative.
+
+```{r sargan-table, eval = FALSE}
+sargan_rates <- summarise_sargan(
+  returns_xts    = g20_returns,
+  channels       = channels,
+  periods        = crisis_periods,
+  abs_threshold  = abs_thr
+)
+sargan_rates[, c("Period", "RejectRate")]
+```
+
+# 8. Bootstrap confidence intervals
+
+Each Stage 2 share is paired with a wild-cluster bootstrap interval. The
+default uses 999 Rademacher draws clustered at the directional-link level;
+this is computationally heavy and we mark it `eval = FALSE`.
+
+```{r bootstrap, eval = FALSE}
+boot_pc <- bootstrap_attribution(
+  fit       = iv_pc,
+  B         = 999,
+  type      = "wild_cluster",
+  cluster   = "link"
+)
+boot_pc$ci_95
+```
+
+# 9. Cinelli-Hazlett robustness values
+
+The robustness value (RV) reports the *minimum* unobserved-confounder strength
+required to overturn an estimated channel share. A high RV indicates a
+finding that is hard to break by an omitted variable; the paper flags any
+share with `RV >= 0.20` as *quantitatively robust*.
+
+```{r rv, eval = FALSE}
+rv_pc <- cinelli_hazlett_rv(
+  theta = iv_pc$shares,
+  se    = iv_pc$se,
+  df    = iv_pc$df_residual
+)
+round(rv_pc, 3)
+```
+
+For the Pre-Crisis Financial share the RV is well above 0.20, consistent
+with Table 7 of the paper.
+
+# 10. Visualisation walkthrough (Figures 1-7)
+
+The package bundles three plotting helpers built on `ggplot2` and a
+`network`/`igraph` back-end. Each one corresponds to a numbered figure in
+the manuscript.
+
+```{r fig-attribution, eval = FALSE}
+plot_attribution_stack(
+  shares_long = bind_rows(lapply(crisis_periods, function(p) iv_pc$shares)),
+  period_order = names(crisis_periods)
+)  # Figure 4: stacked attribution shares
+```
+
+```{r fig-qte, eval = FALSE}
+plot_qte_intensity(
+  F_matrix  = F_pc,
+  threshold = abs_thr
+)  # Figure 2: WQTE heatmap
+```
+
+```{r fig-rv, eval = FALSE}
+plot_robustness_value(
+  rv_table = rv_pc,
+  period   = "PreCrisis"
+)  # Figure 7: RV bounding contours
+```
+
+Figures 1, 3, 5, and 6 are produced by `plot_pipeline_summary()` which
+arranges all panels into the multi-figure layout used in the paper.
+
+# 11. Walktrap communities
+
+Stage 1's directed adjacency is fed into igraph's walktrap algorithm to
+detect mesoscale communities. With four random walks of length four, the
+Pre-Crisis network resolves into three communities tightly aligned with
+the Anglo, EU, and EM blocs.
+
+```{r communities, eval = FALSE}
+g_pc <- build_network(F_pc, threshold = abs_thr)
+comms_pc <- walktrap_communities(g_pc, steps = 4)
+table(membership(comms_pc))
+```
+
+Modularity scores per period are tabulated by `summarise_communities()` and
+match Table 5 of the paper.
+
+# 12. End-to-end pipeline
+
+The convenience wrapper `run_contagion_pipeline()` chains every step above
+into a single call. It returns a tagged list with Stage 1 and Stage 2
+outputs for every sub-period, the bootstrap intervals, the RV grid, and a
+ready-to-print summary table.
+
+```{r pipeline, eval = FALSE}
+results <- run_contagion_pipeline(
+  returns       = g20_returns,
+  channels      = channels,
+  periods       = crisis_periods,
+  scale         = 5,
+  tau           = 0.50,
+  abs_threshold = abs_thr,
+  methods       = c("iv2sls", "lasso_iv", "lp", "rigobon"),
+  bootstrap_B   = 999,
+  n_cores = 4
+)
+
+names(results)
+results$summary_table
+```
+
+The `results` object is the canonical artefact for downstream analysis; the
+companion replication archive on Zenodo distributes a serialised version
+that exactly matches the published tables. With this vignette in hand, every
+row of Tables 1, 2, 6, and 7, every panel of Figures 1-7, and every
+sensitivity reported in the appendix can be regenerated from the bundled
+data with no external inputs.
+
+# Session info
+
+```{r session}
+sessionInfo()
+```

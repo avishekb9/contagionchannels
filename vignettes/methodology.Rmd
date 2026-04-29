@@ -1,0 +1,328 @@
+---
+title: "Methodology Guide"
+author: "Avishek Bhandari"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Methodology Guide}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6.5,
+  fig.height = 4
+)
+```
+
+# Overview
+
+`contagionchannels` operationalises a two-stage research design that is
+deliberately ecumenical about identification. Stage 1 *detects*
+directional information flow between markets using Wavelet-Quantile
+Transfer Entropy (WQTE). Stage 2 *attributes* the detected flow to five
+economically meaningful channels using a battery of estimators that lean
+on different identifying assumptions. This vignette walks through the
+conceptual machinery one layer at a time and points to the canonical
+references for each component.
+
+```{r libs}
+library(contagionchannels)
+```
+
+# 1. The detection-attribution distinction
+
+A perennial confusion in the contagion literature is the elision of two
+quite different statistical questions:
+
+1.  **Detection.** *Does* country $i$'s return predict country $j$'s
+    return beyond what is implied by their joint distribution at common
+    factors?
+2.  **Attribution.** *Through which channel* (trade, finance, sentiment,
+    geopolitics, monetary policy) does that predictive content travel?
+
+Detection is a local, model-free question best answered with a flexible
+information-theoretic statistic; attribution is a structural question
+that requires explicit identifying restrictions. Conflating the two
+leads to the familiar problem in which a generic correlation spike is
+read as evidence of a particular causal channel. The two-stage design
+enforces a clean separation: the WQTE step asks only whether a flow
+exists; the IV/LP/Rigobon step asks which structural shock the flow
+embeds.
+
+# 2. Stage 1: WQTE math intuition
+
+The Stage 1 statistic combines three classical ingredients: Schreiber's
+(2000) transfer entropy, the maximal-overlap discrete wavelet transform
+(MODWT) for scale-localisation, and conditional quantile filtering for
+tail sensitivity.
+
+## Transfer entropy
+
+For two stationary series $X_t$ and $Y_t$ Schreiber's transfer entropy
+from $X$ to $Y$ is
+
+$$
+T_{X \to Y} \;=\; \sum p\!\left(y_{t+1}, y_t^{(k)}, x_t^{(\ell)}\right)
+\; \log
+\frac{p\!\left(y_{t+1} \mid y_t^{(k)}, x_t^{(\ell)}\right)}
+     {p\!\left(y_{t+1} \mid y_t^{(k)}\right)},
+$$
+
+with $y_t^{(k)} = (y_t, y_{t-1}, \dots, y_{t-k+1})$ and similarly for
+$x_t^{(\ell)}$. Intuitively, $T_{X \to Y}$ measures the bits per
+observation that knowing the past of $X$ adds to the prediction of $Y$
+above and beyond $Y$'s own past.
+
+## Wavelet decomposition
+
+We pre-filter both series with the MODWT (Daubechies LA8) at dyadic
+scales $s \in \{1,2,3,4,5,6\}$, producing band-pass returns
+$W_{X,t}^{(s)}$ that isolate fluctuations of period $[2^{s}, 2^{s+1}]$
+trading days. Scale $s=5$ covers the 32-64 day band, which lines up with
+the quarterly business-cycle horizon that motivates most of the channel
+proxies.
+
+## Quantile conditioning
+
+Following Bekiros and co-authors, transfer entropy is computed
+conditional on the source being in a quantile bin. Define
+$X_t^{(\tau)} = \mathbf{1}\{X_t \le Q_X(\tau)\}$ and replace $X$ with
+$X^{(\tau)}$ in the entropy expression above. We use $\tau = 0.50$ as
+the default since the paper's primary interest is the typical (median)
+flow, not just the tail.
+
+## Bias correction
+
+The WQTE point estimate $\widehat{T}^{(s,\tau)}_{i \to j}$ is
+bias-corrected by Monte Carlo shuffling. We draw $B = 100$ permutations
+of the source series, recompute the statistic, and subtract the mean.
+Statistical significance is then assessed by comparing the corrected
+statistic to the upper tail of the shuffled distribution.
+
+```{r wqte-call, eval = FALSE}
+F_mat <- compute_wqte_matrix(
+  returns   = my_returns_xts,
+  scale     = 5,
+  tau       = 0.50,
+  n_cores = 1,
+)
+```
+
+References. Schreiber (2000) introduced transfer entropy
+(<doi:10.1103/PhysRevLett.85.461>). The wavelet implementation borrows
+from the `waveslim` package; quantile conditioning extends the Bekiros
+et al. quantile-cross-spectral approach.
+
+# 3. Stage 2: why multi-method identification?
+
+A point estimate from any single estimator can be artefactual. Different
+methods buy identification with different assumptions:
+
+| Method | Identifying assumption | Failure mode |
+|:---------------|:-------------------------------|:-----------------------|
+| IV/2SLS | Channel-specific instruments are exogenous | Weak/invalid instruments |
+| LASSO IV | Sparsity in the first stage | Approximate-sparsity violation |
+| LP | Conditional mean linearity at each horizon | Non-linearity, regime change |
+| Rigobon | Variance of structural shocks shifts across regimes | Insufficient variance shift |
+
+The package reports all four in parallel. A **robust** finding is one in
+which the dominant channel agrees across estimators; a **fragile**
+finding is one that survives only under a single identifying assumption.
+
+# 4. IV/2SLS with channel-specific instruments
+
+Following the Stock-Watson (2018) external-instruments tradition, we use
+one external proxy per channel:
+
+$$
+\widehat{F}_{i\to j,t} \;=\;
+\alpha + \sum_{c=1}^{5} \beta_c \, C_{c,t} + u_{i\to j,t},
+\qquad
+C_{c,t} \;=\; \pi_c Z_{c,t} + v_{c,t}.
+$$
+
+The instruments $Z_{c,t}$ are: lagged Baltic Dry Index for **Trade**;
+lagged FRA-OIS spread for **Financial**; lagged GPR-Daily for
+**Geopolitical**; lagged VIX innovation for **Behavioral**; lagged
+shadow-rate surprises for **Monetary_Policy**. Standard errors are
+heteroskedasticity-robust and clustered at the directional-link level.
+Over-identification is assessed via the Sargan-Hansen J-test; periods
+with high rejection rates (GFC 67.3%, COVID 100%, ESDC 65.5%) are
+reported but demoted to exploratory.
+
+```{r iv-call, eval = FALSE}
+fit <- iv_2sls_attribute(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  instruments     = list(
+    Trade           = "BDI_lag",
+    Financial       = "FRAOIS_lag",
+    Geopolitical    = "GPR_lag",
+    Behavioral      = "VIX_innov_lag",
+    Monetary_Policy = "ShadowRate_surp_lag"
+  ),
+  cluster_se = TRUE
+)
+```
+
+Reference: Stock and Watson (2018) <doi:10.1111/ecoj.12593>.
+
+# 5. LASSO instrument selection
+
+When the candidate instrument list is long the
+Belloni-Chernozhukov-Hansen (2014) post-LASSO IV estimator is preferred.
+The first stage runs
+
+$$
+C_{c,t} = \pi_c' Z_t + v_{c,t},
+$$
+
+where $Z_t$ is a high-dimensional vector of candidate instruments
+(macroeconomic surprises, policy-rate residuals, commodity shocks, etc.)
+and $\pi_c$ is recovered via LASSO with the iteratively-tuned penalty
+loadings of Belloni et al. The selected instruments feed the
+second-stage 2SLS, and inference is conducted under the standard
+sparsity conditions $s \log(p) / n \to 0$.
+
+```{r lasso-call, eval = FALSE}
+fit_lasso <- lasso_iv_attribute(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  candidate_Z     = candidate_instrument_grid,
+  selection       = "post_lasso"
+)
+```
+
+Reference: Belloni, Chernozhukov and Hansen (2014)
+<doi:10.1093/restud/rdt044>.
+
+# 6. Local projections
+
+Jordà (2005) projections estimate impulse responses by direct OLS at
+each horizon $h$:
+
+$$
+\widehat{F}_{i\to j,t+h} \;=\;
+\alpha_h + \beta_{c,h} \, C_{c,t} + \gamma_h' X_t + u_{i\to j,t+h},
+\quad
+h \in \{1, 5, 22\}.
+$$
+
+LP avoid the recursive bias of VAR-based IRFs and are robust to dynamic
+mis-specification, at the cost of larger standard errors at long
+horizons. We follow Stock-Watson and use Newey-West HAC standard errors
+with bandwidth $h+1$.
+
+```{r lp-call, eval = FALSE}
+lp_fit <- local_projections(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  horizons        = c(1, 5, 22),
+  controls        = c("VIX_lag", "USD_lag")
+)
+```
+
+Reference: Jordà (2005) <doi:10.1257/0002828053828518>.
+
+# 7. Rigobon heteroskedasticity-based identification
+
+When external instruments are unavailable but shock variances shift
+across regimes, Rigobon (2003) provides identification through
+heteroskedasticity. Partition the sample into a high-volatility regime
+$H$ and a low-volatility regime $L$ (we use VIX terciles). The
+reduced-form covariance matrices satisfy
+
+$$
+\Omega_H - \Omega_L = A \,(\Sigma_H - \Sigma_L)\, A',
+$$
+
+so that $A$ is identified up to sign from the difference in covariance
+matrices, provided the structural shock-variance ratio differs across
+regimes. The package's `rigobon_id()` function implements the GMM
+estimator with the analytical Jacobian.
+
+```{r rigobon-call, eval = FALSE}
+rig_fit <- rigobon_id(
+  returns_period  = returns_pc,
+  channels_period = channels_pc,
+  links           = links_pc,
+  regime_split    = "vix_high_low"
+)
+```
+
+Reference: Rigobon (2003) <doi:10.1162/003465303772815727>.
+
+# 8. Cinelli-Hazlett robustness value
+
+Identification-robust point estimates are not the end of the story:
+unobserved confounders may still be lurking. The Cinelli-Hazlett (2020)
+RV quantifies the minimum strength of an unobserved confounder,
+expressed as its partial $R^2$ with both the treatment and the outcome,
+that would push the estimated coefficient to zero (the "tipping point"
+RV) or to its two-sided null (the "5% RV"):
+
+$$
+\mathrm{RV}_{q} \;=\;
+\frac{1}{2}
+\left(
+\sqrt{f_q^{4} + 4 f_q^{2}} - f_q^{2}
+\right),
+\quad
+f_q \;=\;
+\frac{|\hat{\theta}| - q \cdot \widehat{\mathrm{SE}}}
+     {|\hat{\theta}| + q \cdot \widehat{\mathrm{SE}}}\cdot
+\sqrt{\mathrm{df}}.
+$$
+
+A coefficient with $\mathrm{RV} \ge 0.20$ is one that no plausible
+single-confounder explanation can overturn under reasonable benchmarks.
+
+```{r rv-call, eval = FALSE}
+rv <- cinelli_hazlett_rv(
+  theta = fit$shares,
+  se    = fit$se,
+  df    = fit$df_residual
+)
+```
+
+Reference: Cinelli and Hazlett (2020) <doi:10.1111/rssb.12348>.
+
+# 9. Identification-status classification
+
+The decision rule used in the paper is intentionally conservative:
+
+-   **Robust** — dominant channel agrees across IV/2SLS, LP-h5 and
+    Rigobon, Sargan rejection rate below 50%, and Cinelli-Hazlett
+    $\mathrm{RV} \ge
+    0.20$ for the dominant channel.
+-   **Fragile** — at least one of the three estimators disagrees on the
+    dominant channel, *or* Sargan rejects in more than half of links,
+    *or* $\mathrm{RV} < 0.20$.
+-   **Exploratory** — Sargan rejection rate above 65% (GFC, COVID,
+    ESDC). Reported but not used as primary evidence.
+
+Out of the eight sub-periods, only **Pre-Crisis (Financial)** and **ESDC
+(Financial)** clear the bar for *robust*; the remaining six are reported
+as fragile, with the exploratory flag attached to GFC and COVID.
+
+This explicit grading is what makes the package useful for empirical
+work: the user is never invited to mistake a single-method point
+estimate for a robust attribution claim. The codebase, vignettes, and
+the report objects returned by `run_contagion_pipeline()` propagate the
+identification status into every downstream summary table and figure.
+
+# Session info
+
+```{r session}
+sessionInfo()
+```

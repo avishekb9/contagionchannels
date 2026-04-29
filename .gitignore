@@ -1,0 +1,20 @@
+# R build artefacts
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.tar.gz
+*.tgz
+*.Rcheck/
+
+# Hidden agent / IDE directories — must not ship to CRAN
+.claude
+.cursor
+.idea
+.vscode
+.DS_Store
+
+# Temporary outputs
+/tmp/
+/results/
+vignettes/*.html

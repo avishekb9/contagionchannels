@@ -1,0 +1,39 @@
+citHeader("To cite the contagionchannels package in publications use:")
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "contagionchannels: Two-Stage Detection and Attribution of Cross-Border Financial Contagion Channels",
+  author   = c(
+    person(given = "Avishek", family = "Bhandari"),
+    person(given = "Ipsita",  family = "Parida"),
+    person(given = "Hitesh Kumar", family = "Sahu")
+  ),
+  year     = "2026",
+  note     = "R package version 0.1.0",
+  url      = "https://github.com/avishekb9/contagionchannels",
+  textVersion = paste(
+    "Bhandari, A., Parida, I., & Sahu, H. K. (2026).",
+    "contagionchannels: Two-Stage Detection and Attribution of Cross-Border",
+    "Financial Contagion Channels.",
+    "R package version 0.1.0.",
+    "URL: https://github.com/avishekb9/contagionchannels"
+  )
+)
+
+bibentry(
+  bibtype  = "Unpublished",
+  title    = "What Drives Contagion? Identifying and Attributing Cross-Border Transmission Mechanisms",
+  author   = c(
+    person(given = "Avishek", family = "Bhandari"),
+    person(given = "Ipsita",  family = "Parida"),
+    person(given = "Hitesh Kumar", family = "Sahu")
+  ),
+  year     = "2026",
+  note     = "Working paper, Indian Institute of Technology Bhubaneswar",
+  textVersion = paste(
+    "Bhandari, A., Parida, I., & Sahu, H. K. (2026).",
+    "What Drives Contagion? Identifying and Attributing Cross-Border",
+    "Transmission Mechanisms.",
+    "Working paper, Indian Institute of Technology Bhubaneswar."
+  )
+)
