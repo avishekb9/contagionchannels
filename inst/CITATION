@@ -9,13 +9,13 @@ bibentry(
     person(given = "Hitesh Kumar", family = "Sahu")
   ),
   year     = "2026",
-  note     = "R package version 0.1.1",
+  note     = "R package version 0.1.2",
   url      = "https://github.com/avishekb9/contagionchannels",
   textVersion = paste(
     "Bhandari, A., Parida, I., & Sahu, H. K. (2026).",
     "contagionchannels: Two-Stage Detection and Attribution of Cross-Border",
     "Financial Contagion Channels.",
-    "R package version 0.1.1.",
+    "R package version 0.1.2.",
     "URL: https://github.com/avishekb9/contagionchannels"
   )
 )
@@ -32,12 +32,13 @@ bibentry(
   eprint   = "2604.26546",
   archivePrefix = "arXiv",
   primaryClass  = "q-fin.ST",
+  doi      = "10.48550/arXiv.2604.26546",
   url      = "https://arxiv.org/abs/2604.26546",
   textVersion = paste(
     "Bhandari, A., Parida, I., & Sahu, H. K. (2026).",
     "What Drives Contagion? Identifying and Attributing Cross-Border",
     "Transmission Mechanisms.",
     "arXiv preprint arXiv:2604.26546.",
-    "https://arxiv.org/abs/2604.26546"
+    "doi:10.48550/arXiv.2604.26546."
   )
 )

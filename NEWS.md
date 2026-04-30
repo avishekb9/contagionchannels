@@ -1,3 +1,11 @@
+# contagionchannels 0.1.2 (2026-04-30)
+
+* Address CRAN auto-check feedback on 0.1.1: arXiv preprint references
+  in `DESCRIPTION` must use the arXiv DOI form
+  `<doi:10.48550/arXiv.YYMM.NNNNN>`. Updated the Bhandari, Parida & Sahu
+  (2026) reference accordingly. The CITATION entry now also exposes the
+  arXiv DOI explicitly.
+
 # contagionchannels 0.1.1 (2026-04-30)
 
 * Address CRAN reviewer feedback: drop the `+ file LICENSE` qualifier

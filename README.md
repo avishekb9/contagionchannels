@@ -33,7 +33,7 @@ devtools::install_local("path/to/contagionchannels", build_vignettes = TRUE)
 Or directly from the source tarball:
 
 ```r
-install.packages("contagionchannels_0.1.1.tar.gz", repos = NULL, type = "source")
+install.packages("contagionchannels_0.1.2.tar.gz", repos = NULL, type = "source")
 ```
 
 ## Quick start
@@ -132,7 +132,7 @@ If you use the package in published work, please cite the methodology paper:
               Cross-Border Financial Contagion Channels},
   author   = {Bhandari, Avishek and Parida, Ipsita and Sahu, Hitesh Kumar},
   year     = {2026},
-  note     = {R package version 0.1.1},
+  note     = {R package version 0.1.2},
   url      = {https://github.com/avishekb9/contagionchannels}
 }
 ```

@@ -2,7 +2,7 @@ Package: contagionchannels
 Type: Package
 Title: Two-Stage Detection and Attribution of Cross-Border Financial
     Contagion Channels
-Version: 0.1.1
+Version: 0.1.2
 Date: 2026-04-30
 Authors@R: c(
     person(given = "Avishek", family = "Bhandari", role = c("aut","cre"),
@@ -35,8 +35,8 @@ Description: Implementation of a two-stage framework for the joint
     Cinelli-Hazlett (2020) <doi:10.1111/rssb.12348> robustness-value
     sensitivity bound. Bundled datasets and replication scripts reproduce
     the headline findings of Bhandari, Parida and Sahu (2026)
-    <arXiv:2604.26546>; the package is general-purpose and accommodates
-    user-supplied returns and channel proxies.
+    <doi:10.48550/arXiv.2604.26546>; the package is general-purpose and
+    accommodates user-supplied returns and channel proxies.
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
