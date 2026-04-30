@@ -4,9 +4,10 @@
 
 [![License: GPL-3](https://img.shields.io/badge/License-GPL%203-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![R-CMD-check](https://img.shields.io/badge/R--CMD--check-passing-brightgreen)](https://github.com/avishekb9/contagionchannels)
+[![arXiv](https://img.shields.io/badge/arXiv-2604.26546-b31b1b.svg)](https://arxiv.org/abs/2604.26546)
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/)
 
-`contagionchannels` is an R package implementing the two-stage framework for the joint **detection and attribution** of cross-border financial contagion developed in Bhandari, Parida and Sahu (2026). The framework first detects directional information flows between equity markets via Wavelet-Quantile Transfer Entropy and then attributes each significant directional link to one of five mutually exclusive transmission channels — **Trade, Financial, Geopolitical, Behavioural, Monetary Policy** — through a multi-method structural-identification architecture.
+`contagionchannels` is an R package implementing the two-stage framework for the joint **detection and attribution** of cross-border financial contagion developed in Bhandari, Parida and Sahu (2026), [arXiv:2604.26546](https://arxiv.org/abs/2604.26546). The framework first detects directional information flows between equity markets via Wavelet-Quantile Transfer Entropy and then attributes each significant directional link to one of five mutually exclusive transmission channels — **Trade, Financial, Geopolitical, Behavioural, Monetary Policy** — through a multi-method structural-identification architecture.
 
 ## Highlights
 
@@ -32,7 +33,7 @@ devtools::install_local("path/to/contagionchannels", build_vignettes = TRUE)
 Or directly from the source tarball:
 
 ```r
-install.packages("contagionchannels_0.1.0.tar.gz", repos = NULL, type = "source")
+install.packages("contagionchannels_0.1.1.tar.gz", repos = NULL, type = "source")
 ```
 
 ## Quick start
@@ -108,21 +109,33 @@ source(master)
 
 ## Citation
 
+If you use the package in published work, please cite the methodology paper:
+
+> Bhandari, A., Parida, I., & Sahu, H. K. (2026). What Drives Contagion?
+> Identifying and Attributing Cross-Border Transmission Mechanisms.
+> arXiv preprint [arXiv:2604.26546](https://arxiv.org/abs/2604.26546).
+
 ```bibtex
+@misc{bhandari2026contagion,
+  title         = {What Drives Contagion? Identifying and Attributing
+                   Cross-Border Transmission Mechanisms},
+  author        = {Bhandari, Avishek and Parida, Ipsita and Sahu, Hitesh Kumar},
+  year          = {2026},
+  eprint        = {2604.26546},
+  archivePrefix = {arXiv},
+  primaryClass  = {q-fin.ST},
+  url           = {https://arxiv.org/abs/2604.26546}
+}
+
 @manual{contagionchannels2026,
   title    = {contagionchannels: Two-Stage Detection and Attribution of
               Cross-Border Financial Contagion Channels},
   author   = {Bhandari, Avishek and Parida, Ipsita and Sahu, Hitesh Kumar},
   year     = {2026},
-  note     = {R package version 0.1.0},
+  note     = {R package version 0.1.1},
   url      = {https://github.com/avishekb9/contagionchannels}
 }
 ```
-
-If you use the package in published work, please also cite the methodology paper:
-
-> Bhandari, A., Parida, I., & Sahu, H. K. (2026). What Drives Contagion? Identifying
-> and Attributing Cross-Border Transmission Mechanisms. Working paper.
 
 ## License
 

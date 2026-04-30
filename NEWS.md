@@ -1,3 +1,12 @@
+# contagionchannels 0.1.1 (2026-04-30)
+
+* Address CRAN reviewer feedback: drop the `+ file LICENSE` qualifier
+  from `License:` (kept as plain `GPL-3`) and remove the LICENSE file,
+  per Uwe Ligges -- the auxiliary LICENSE file is reserved for cases
+  where the base licence permits additional restrictions.
+* Add the methodology preprint Bhandari, Parida & Sahu (2026),
+  arXiv:2604.26546, to DESCRIPTION, CITATION, and README.
+
 # contagionchannels 0.1.0 (2026-04-29)
 
 * First release.
