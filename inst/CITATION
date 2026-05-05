@@ -9,13 +9,13 @@ bibentry(
     person(given = "Hitesh Kumar", family = "Sahu")
   ),
   year     = "2026",
-  note     = "R package version 0.1.2",
+  note     = "R package version 0.1.3",
   url      = "https://github.com/avishekb9/contagionchannels",
   textVersion = paste(
     "Bhandari, A., Parida, I., & Sahu, H. K. (2026).",
     "contagionchannels: Two-Stage Detection and Attribution of Cross-Border",
     "Financial Contagion Channels.",
-    "R package version 0.1.2.",
+    "R package version 0.1.3.",
     "URL: https://github.com/avishekb9/contagionchannels"
   )
 )

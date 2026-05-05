@@ -1,3 +1,12 @@
+# contagionchannels 0.1.3 (2026-04-30)
+
+* Address CRAN reviewer feedback (Benjamin Altmann): the
+  `plot_qte_intensity()` base-graphics fallback path mutated
+  `graphics::par(mfrow = ...)` and reset it manually at the end.
+  Replaced with the canonical `oldpar <- par(no.readonly = TRUE);
+  on.exit(par(oldpar))` idiom so the user's graphical parameters are
+  restored even if the function exits via an error.
+
 # contagionchannels 0.1.2 (2026-04-30)
 
 * Address CRAN auto-check feedback on 0.1.1: arXiv preprint references

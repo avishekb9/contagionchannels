@@ -67,6 +67,8 @@ plot_attribution_stack <- function(period_shares, ...) {
 #' @export
 plot_qte_intensity <- function(stage1_summary) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    oldpar <- graphics::par(no.readonly = TRUE)
+    on.exit(graphics::par(oldpar))
     graphics::par(mfrow = c(2, 1))
     graphics::plot(stage1_summary$MeanQTE, type = "b", xaxt = "n",
                    xlab = "", ylab = "Mean QTE")
@@ -75,7 +77,7 @@ plot_qte_intensity <- function(stage1_summary) {
     graphics::barplot(stage1_summary$Density,
                       names.arg = stage1_summary$Period, las = 2,
                       ylab = "Density (%)")
-    graphics::par(mfrow = c(1, 1)); return(invisible())
+    return(invisible())
   }
   s1 <- stage1_summary
   s1$Period <- factor(s1$Period, levels = s1$Period)
