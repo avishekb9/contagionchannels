@@ -2,6 +2,8 @@
 
 > **Two-Stage Detection and Attribution of Cross-Border Financial Contagion Channels**
 
+[![CRAN status](https://www.r-pkg.org/badges/version/contagionchannels)](https://CRAN.R-project.org/package=contagionchannels)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/grand-total/contagionchannels)](https://CRAN.R-project.org/package=contagionchannels)
 [![License: GPL-3](https://img.shields.io/badge/License-GPL%203-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![R-CMD-check](https://img.shields.io/badge/R--CMD--check-passing-brightgreen)](https://github.com/avishekb9/contagionchannels)
 [![arXiv](https://img.shields.io/badge/arXiv-2604.26546-b31b1b.svg)](https://arxiv.org/abs/2604.26546)
@@ -23,14 +25,20 @@
 
 ## Installation
 
-From source (the package is not yet on CRAN):
+From CRAN:
 
 ```r
-# install.packages("devtools")
-devtools::install_local("path/to/contagionchannels", build_vignettes = TRUE)
+install.packages("contagionchannels")
 ```
 
-Or directly from the source tarball:
+Development version from GitHub:
+
+```r
+# install.packages("remotes")
+remotes::install_github("avishekb9/contagionchannels", build_vignettes = TRUE)
+```
+
+From a local source tarball:
 
 ```r
 install.packages("contagionchannels_0.1.3.tar.gz", repos = NULL, type = "source")
